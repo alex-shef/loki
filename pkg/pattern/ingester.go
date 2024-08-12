@@ -42,7 +42,7 @@ type Config struct {
 	MaxEvictionRatio  float64               `yaml:"max_eviction_ratio,omitempty" doc:"description=The maximum eviction ratio of patterns per stream. Once that ratio is reached, the stream will throttled pattern detection."`
 	MetricAggregation aggregation.Config    `yaml:"metric_aggregation,omitempty" doc:"description=Configures the metric aggregation and storage behavior of the pattern ingester."`
 	TeeParallelism    int                   `yaml:"tee_parallelism,omitempty"    doc:"description=The number of parallel goroutines to use for forwarding requests to the pattern ingester."`
-	TeeBufferSize     int                   `yaml:"tee_buffer_size,omitempty"    doc:"Maxiumum number of pending teed request to pattern ingesters. If the buffer is full the request is dropped."`
+	TeeQueueSize      int                   `yaml:"tee_queue_size,omitempty"    doc:"Maxiumum number of pending teed request to pattern ingesters. If the queue is full the request is dropped."`
 
 	// For testing.
 	factory ring_client.PoolFactory `yaml:"-"`
@@ -90,10 +90,10 @@ func (cfg *Config) RegisterFlags(fs *flag.FlagSet) {
 		"The number of parallel goroutines to use for forwarding requests to the pattern ingester.",
 	)
 	fs.IntVar(
-		&cfg.TeeBufferSize,
-		"pattern-ingester.tee-buffer-size",
+		&cfg.TeeQueueSize,
+		"pattern-ingester.tee-queue-size",
 		100,
-		"Maxiumum number of pending teed request to pattern ingesters. If the buffer is full the request is dropped.",
+		"Maxiumum number of pending teed request to pattern ingesters. If the queue is full the request is dropped.",
 	)
 }
 

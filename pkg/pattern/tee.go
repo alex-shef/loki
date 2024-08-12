@@ -24,6 +24,7 @@ type Tee struct {
 	ingesterMetricAppends *prometheus.CounterVec
 
 	teedRequests *prometheus.CounterVec
+	teeQueueSize *prometheus.GaugeVec
 
 	requestCh chan request
 
@@ -54,14 +55,18 @@ func NewTee(
 		ingesterMetricAppends: promauto.With(registerer).NewCounterVec(prometheus.CounterOpts{
 			Name: "pattern_ingester_metric_appends_total",
 			Help: "The total number of metric only batch appends sent to pattern ingesters. These requests will not be processed for patterns.",
-		}, []string{"ingester", "status"}),
+		}, []string{"status"}),
 		teedRequests: promauto.With(registerer).NewCounterVec(prometheus.CounterOpts{
 			Name: "pattern_ingester_teed_requests_total",
 			Help: "The total number of batch appends sent to fallback pattern ingesters, for not owned streams.",
 		}, []string{"tenant", "status"}),
+		teeQueueSize: promauto.With(registerer).NewGaugeVec(prometheus.GaugeOpts{
+			Name: "pattern_ingester_tee_queue_size",
+			Help: "Current number of requests in the pattern ingester tee queue.",
+		}, []string{"tenant", "status"}),
 		cfg:        cfg,
 		ringClient: ringClient,
-		requestCh:  make(chan request, cfg.TeeBufferSize),
+		requestCh:  make(chan request, cfg.TeeQueueSize),
 		quit:       make(chan struct{}),
 	}
 
@@ -78,6 +83,7 @@ func (t *Tee) run() {
 		case <-t.quit:
 			return
 		case req := <-t.requestCh:
+			t.teeQueueSize.WithLabelValues(req.tenant).Dec()
 			ctx, cancel := context.WithTimeout(
 				user.InjectOrgID(context.Background(), req.tenant),
 				t.cfg.ClientConfig.RemoteTimeout,
@@ -94,6 +100,7 @@ func (t *Tee) run() {
 func (t *Tee) sendStream(ctx context.Context, stream distributor.KeyedStream) error {
 	err := t.sendOwnedStream(ctx, stream)
 	if err == nil {
+		t.ingesterMetricAppends.WithLabelValues("success").Inc()
 		// Success, return early
 		return nil
 	}
@@ -104,7 +111,7 @@ func (t *Tee) sendStream(ctx context.Context, stream distributor.KeyedStream) er
 	// try to forward request to any pattern ingester so we at least capture the metrics.
 	replicationSet, err := t.ringClient.Ring().GetReplicationSetForOperation(ring.WriteNoExtend)
 	if replicationSet.Instances == nil {
-		t.ingesterMetricAppends.WithLabelValues("none", "fail").Inc()
+		t.ingesterMetricAppends.WithLabelValues("fail").Inc()
 		return errors.New("no instances found for fallback")
 	}
 
@@ -120,15 +127,16 @@ func (t *Tee) sendStream(ctx context.Context, stream distributor.KeyedStream) er
 
 			_, err = client.(logproto.PatternClient).Push(ctx, req)
 			if err != nil {
-				t.ingesterMetricAppends.WithLabelValues(addr, "fail").Inc()
 				continue
 			}
-			t.ingesterMetricAppends.WithLabelValues(addr, "success").Inc()
+
+			t.ingesterMetricAppends.WithLabelValues("success").Inc()
 			// bail after any success to prevent sending more than one
 			return nil
 		}
 	}
 
+	t.ingesterMetricAppends.WithLabelValues("fail").Inc()
 	return err
 }
 
@@ -139,6 +147,7 @@ func (t *Tee) sendOwnedStream(ctx context.Context, stream distributor.KeyedStrea
 		return err
 	}
 	if replicationSet.Instances == nil {
+		t.ingesterAppends.WithLabelValues("none", "fail").Inc()
 		return errors.New("no instances found")
 	}
 	addr := replicationSet.Instances[0].Addr
@@ -159,7 +168,6 @@ func (t *Tee) sendOwnedStream(ctx context.Context, stream distributor.KeyedStrea
 	}
 	// Success here means the stream will be processed for both metrics and patterns
 	t.ingesterAppends.WithLabelValues(addr, "success").Inc()
-	t.ingesterMetricAppends.WithLabelValues(addr, "success").Inc()
 	return nil
 }
 
@@ -177,6 +185,7 @@ func (t *Tee) Duplicate(tenant string, streams []distributor.KeyedStream) {
 			select {
 			case t.requestCh <- req:
 				t.teedRequests.WithLabelValues(tenant, "queued").Inc()
+				t.teeQueueSize.WithLabelValues(req.tenant).Inc()
 				return
 			default:
 				t.teedRequests.WithLabelValues(tenant, "dropped").Inc()
@@ -189,5 +198,5 @@ func (t *Tee) Duplicate(tenant string, streams []distributor.KeyedStream) {
 // Stop will cancel any ongoing requests and stop the goroutine listening for requests
 func (t *Tee) Stop() {
 	close(t.quit)
-	t.requestCh = make(chan request, t.cfg.TeeBufferSize)
+	t.requestCh = make(chan request, t.cfg.TeeQueueSize)
 }
