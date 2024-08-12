@@ -642,9 +642,13 @@ pattern_ingester:
 
         [username_file: <string> | default = ""]
 
+        [username_ref: <string> | default = ""]
+
         [password: <string> | default = ""]
 
         [password_file: <string> | default = ""]
+
+        [password_ref: <string> | default = ""]
 
       authorization:
         [type: <string> | default = ""]
@@ -653,12 +657,16 @@ pattern_ingester:
 
         [credentials_file: <string> | default = ""]
 
+        [credentials_ref: <string> | default = ""]
+
       oauth2:
         [client_id: <string> | default = ""]
 
         [client_secret: <string> | default = ""]
 
         [client_secret_file: <string> | default = ""]
+
+        [client_secret_ref: <string> | default = ""]
 
         [scopes: <list of strings>]
 
@@ -678,6 +686,12 @@ pattern_ingester:
           [cert_file: <string> | default = ""]
 
           [key_file: <string> | default = ""]
+
+          [ca_ref: <string> | default = ""]
+
+          [cert_ref: <string> | default = ""]
+
+          [key_ref: <string> | default = ""]
 
           [server_name: <string> | default = ""]
 
@@ -713,6 +727,12 @@ pattern_ingester:
 
         [key_file: <string> | default = ""]
 
+        [ca_ref: <string> | default = ""]
+
+        [cert_ref: <string> | default = ""]
+
+        [key_ref: <string> | default = ""]
+
         [server_name: <string> | default = ""]
 
         [insecure_skip_verify: <boolean>]
@@ -733,6 +753,9 @@ pattern_ingester:
       [proxy_from_environment: <boolean>]
 
       [proxy_connect_header: <map of string to list of strings>]
+
+      http_headers:
+        [: <map of string to Header>]
 
     # Whether to use TLS for pushing metrics to Loki.
     # CLI flag: -pattern-ingester.metric-aggregation.tls
@@ -767,10 +790,10 @@ pattern_ingester:
   # CLI flag: -pattern-ingester.tee-parallelism
   [tee_parallelism: <int> | default = 5]
 
-  # Maxiumum number of pending teed request to pattern ingesters. If the buffer
+  # Maxiumum number of pending teed request to pattern ingesters. If the queue
   # is full the request is dropped.
-  # CLI flag: -pattern-ingester.tee-buffer-size
-  [tee_buffer_size: <int> | default = 100]
+  # CLI flag: -pattern-ingester.tee-queue-size
+  [tee_queue_size: <int> | default = 100]
 
 # The index_gateway block configures the Loki index gateway server, responsible
 # for serving index queries without the need to constantly interact with the
@@ -1319,6 +1342,10 @@ backoff_config:
   # Maximum number of times to retry when s3 get Object
   # CLI flag: -s3.max-retries
   [max_retries: <int> | default = 5]
+
+# Disable forcing S3 dualstack endpoint usage.
+# CLI flag: -s3.disable-dualstack
+[disable_dualstack: <boolean> | default = false]
 ```
 
 ### azure_storage_config
@@ -5238,6 +5265,10 @@ backoff_config:
   # Maximum number of times to retry when s3 get Object
   # CLI flag: -<prefix>.storage.s3.max-retries
   [max_retries: <int> | default = 5]
+
+# Disable forcing S3 dualstack endpoint usage.
+# CLI flag: -<prefix>.storage.s3.disable-dualstack
+[disable_dualstack: <boolean> | default = false]
 ```
 
 ### schema_config
